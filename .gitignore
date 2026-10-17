@@ -1,0 +1,20 @@
+# Secrets and local state
+.env
+data/
+*.db
+*.db-shm
+*.db-wal
+tls.key
+tls.crt
+
+# Build output
+/scratchpads
+/build/
+/dist/
+
+# Tooling
+node_modules/
+.DS_Store
+.idea/
+.vscode/
+*.swp

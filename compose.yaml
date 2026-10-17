@@ -1,0 +1,41 @@
+services:
+  scratchpads:
+    image: ghcr.io/lakr233/scratchpads:latest
+    # Build from source instead: docker compose up -d --build
+    build: .
+    container_name: scratchpads
+    restart: unless-stopped
+    ports:
+      # Only reachable from this machine. Use the Cloudflare tunnel to publish.
+      - "127.0.0.1:8443:8443"
+    environment:
+      SP_HOSTNAMES: ${SP_HOSTNAMES:-localhost,127.0.0.1,::1,scratchpads.orb.local,scratchpads}
+      SP_TRUST_CLOUDFLARE: ${SP_TRUST_CLOUDFLARE:-0}
+      # Web admin sign-in. Set SP_ADMIN_PASSWORD in .env (never commit it);
+      # leave it empty to turn password sign-in off.
+      SP_ADMIN_USER: ${SP_ADMIN_USER:-admin}
+      SP_ADMIN_PASSWORD: ${SP_ADMIN_PASSWORD:-}
+    volumes:
+      - data:/data
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+  # docker compose --profile cloudflare up -d
+  # Tunnel public hostname -> service https://scratchpads:8443 with
+  # "No TLS Verify" on (the origin cert is self-signed, traffic stays on the
+  # compose network).
+  cloudflared:
+    profiles: [cloudflare]
+    image: cloudflare/cloudflared:2025.10.0
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    depends_on: [scratchpads]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+volumes:
+  data:

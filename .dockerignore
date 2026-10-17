@@ -1,0 +1,8 @@
+.git
+.env
+data
+build
+dist
+node_modules
+*.md
+!skills/scratchpads/SKILL.md
