@@ -113,6 +113,7 @@ const ZH = {
   write: "可写",
   admin: "管理",
   Language: "语言",
+  "Paste this into {0}. The token is shown only once:": "把下面这段整段粘贴给 {0}。令牌只显示这一次：",
   // Server error messages shown in the UI.
   "not found": "找不到",
   "already exists": "已经存在",

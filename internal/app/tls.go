@@ -18,6 +18,8 @@ import (
 	"path/filepath"
 	"slices"
 	"time"
+
+	"golang.org/x/crypto/acme/autocert"
 )
 
 // LoadOrCreateCert returns the TLS certificate the server listens with.
@@ -123,4 +125,52 @@ func PublicKeyPin(cert tls.Certificate) (string, error) {
 func CertFingerprint(cert tls.Certificate) string {
 	sum := sha256.Sum256(cert.Certificate[0])
 	return fmt.Sprintf("%X", sum[:])
+}
+
+// TLSConfig serves ACME certificates for cfg.ACMEDomains and the self-signed
+// certificate for every other name (localhost, IPs, internal hostnames).
+func TLSConfig(cfg Config, selfSigned tls.Certificate) (*tls.Config, TLSInfo, error) {
+	conf := &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{selfSigned}}
+	pin, err := PublicKeyPin(selfSigned)
+	if err != nil {
+		return nil, TLSInfo{}, err
+	}
+	if cfg.TLSCert != "" {
+		return conf, TLSInfo{Mode: "custom"}, nil
+	}
+	if len(cfg.ACMEDomains) == 0 {
+		return conf, TLSInfo{Mode: "self-signed", Pin: pin}, nil
+	}
+	m := &autocert.Manager{
+		Prompt:     autocert.AcceptTOS,
+		HostPolicy: autocert.HostWhitelist(cfg.ACMEDomains...),
+		Cache:      autocert.DirCache(filepath.Join(cfg.DataDir, "acme")),
+		Email:      cfg.ACMEEmail,
+	}
+	acme := map[string]bool{}
+	for _, d := range cfg.ACMEDomains {
+		acme[d] = true
+	}
+	conf.NextProtos = []string{"h2", "http/1.1", "acme-tls/1"}
+	conf.GetCertificate = func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		if !acme[hello.ServerName] {
+			return &selfSigned, nil
+		}
+		return m.GetCertificate(hello)
+	}
+	// Warm the certificate in the background so the first visitor does not wait.
+	go func() {
+		for _, d := range cfg.ACMEDomains {
+			hello := &tls.ClientHelloInfo{
+				ServerName:       d,
+				CipherSuites:     []uint16{tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256},
+				SignatureSchemes: []tls.SignatureScheme{tls.ECDSAWithP256AndSHA256},
+				SupportedCurves:  []tls.CurveID{tls.CurveP256},
+			}
+			if _, err := m.GetCertificate(hello); err != nil {
+				fmt.Fprintf(os.Stderr, "acme %s: %v\n", d, err)
+			}
+		}
+	}()
+	return conf, TLSInfo{Mode: "acme"}, nil
 }

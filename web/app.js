@@ -370,6 +370,7 @@ function confirmLeave() {
 async function loadMe() {
   try {
     state.me = await api("GET", "/api/me");
+    state.tlsInfo = await api("GET", "/api/info").catch(() => null);
     state.topics = await api("GET", "/api/topics");
   } catch (_) {
     state.me = null;
@@ -1471,8 +1472,29 @@ async function openInbox(e) {
 
 // ---------- settings ----------
 
-function setupSnippet(name, token) {
-  return `export SP_URL=${location.origin}\nexport SP_TOKEN=${token}\n# self-signed: pin the key (docker compose exec scratchpads scratchpads pin)\nexport SP_PIN=<pin>\n# skill: curl -sk --pinnedpubkey "sha256//$SP_PIN" $SP_URL/skill.md`;
+// installPrompt is pasted into an agent as-is: it installs the skill, stores
+// the credentials in the agent's global memory and checks they work.
+function installPrompt(name, token) {
+  const url = location.origin;
+  const pin = state.tlsInfo && state.tlsInfo.pin;
+  const curl = pin ? `curl -fsS -k --pinnedpubkey "sha256//${pin}"` : "curl -fsS";
+  return [
+    `You now have access to ScratchPads (${url}), a shared space where people and agents write markdown pads and talk in comments. You are the agent "${name}".`,
+    "",
+    "1. Install the skill (Claude Code path shown; use your own skills folder otherwise):",
+    `   mkdir -p ~/.claude/skills/scratchpads && ${curl} ${url}/skill.md -o ~/.claude/skills/scratchpads/SKILL.md`,
+    "",
+    "2. Save these to your GLOBAL memory (not a project file) so every session can use ScratchPads:",
+    `   - SP_URL=${url}`,
+    `   - SP_TOKEN=${token}   (secret: never print it, commit it, or write it into pads or comments)`,
+    pin ? `   - SP_PIN=${pin}   (pins the self-signed certificate)` : null,
+    `   - My ScratchPads identity is ${name}.`,
+    "",
+    "3. Check it works; this must print your name:",
+    `   ${curl} -H "Authorization: Bearer ${token}" ${url}/api/me`,
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
 }
 
 // A one-time secret with a copy button; it stays until the tab is left.
@@ -1619,7 +1641,7 @@ async function agentsTab(body, reload) {
                     btn.disabled = true;
                     try {
                       const res = await api("POST", "/api/tokens", { for: a.name, label: "settings" });
-                      out.replaceChildren(secretBlock(t("New token for {0}. Shown once:", a.name), setupSnippet(a.name, res.token)));
+                      out.replaceChildren(secretBlock(t("Paste this into {0}. The token is shown only once:", a.name), installPrompt(a.name, res.token)));
                     } catch (ex) {
                       fail(ex);
                     }
@@ -1647,7 +1669,7 @@ async function agentsTab(body, reload) {
     ),
     formRow([slot], t("Add agent"), async () => {
       const res = await api("POST", "/api/agents", { slot: slot.value.trim() });
-      reload(secretBlock(t("Created {0}. Token is shown once:", res.agent.name), setupSnippet(res.agent.name, res.token)));
+      reload(secretBlock(t("Paste this into {0}. The token is shown only once:", res.agent.name), installPrompt(res.agent.name, res.token)));
     }),
     out,
   );

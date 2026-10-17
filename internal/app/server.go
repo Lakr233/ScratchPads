@@ -22,6 +22,10 @@ type Config struct {
 	TrustCloudflare bool
 	AdminUser       string
 	AdminPassword   string
+	// ACMEDomains get Let's Encrypt certificates through TLS-ALPN-01 on the
+	// HTTPS port itself; other names keep the self-signed certificate.
+	ACMEDomains []string
+	ACMEEmail   string
 }
 
 func ConfigFromEnv() Config {
@@ -34,6 +38,8 @@ func ConfigFromEnv() Config {
 		TrustCloudflare: os.Getenv("SP_TRUST_CLOUDFLARE") == "1",
 		AdminUser:       envOr("SP_ADMIN_USER", "admin"),
 		AdminPassword:   os.Getenv("SP_ADMIN_PASSWORD"),
+		ACMEDomains:     splitList(os.Getenv("SP_ACME_DOMAINS")),
+		ACMEEmail:       os.Getenv("SP_ACME_EMAIL"),
 	}
 	return cfg
 }
@@ -62,6 +68,13 @@ type Server struct {
 	limiter *failureLimiter
 	web     fs.FS
 	skill   []byte
+	tlsInfo TLSInfo
+}
+
+// TLSInfo tells clients how to trust this server.
+type TLSInfo struct {
+	Mode string `json:"tls"`
+	Pin  string `json:"pin,omitempty"`
 }
 
 func OpenDataStore(cfg Config) (*Store, error) {
@@ -87,6 +100,7 @@ func (srv *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/session", srv.logout)
 
 	mux.Handle("GET /api/me", auth(srv.me))
+	mux.Handle("GET /api/info", auth(func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, srv.tlsInfo) }))
 
 	mux.Handle("GET /api/users", auth(srv.listUsers))
 	mux.Handle("POST /api/users", auth(srv.createUser))
@@ -174,7 +188,8 @@ func (srv *Server) logRequests(next http.Handler) http.Handler {
 }
 
 // ListenAndServe serves HTTPS only; there is no plaintext listener.
-func (srv *Server) ListenAndServe(cert tls.Certificate) error {
+func (srv *Server) ListenAndServe(tlsConfig *tls.Config, info TLSInfo) error {
+	srv.tlsInfo = info
 	s := &http.Server{
 		Addr:              srv.cfg.Addr,
 		Handler:           srv.Handler(),
@@ -183,11 +198,8 @@ func (srv *Server) ListenAndServe(cert tls.Certificate) error {
 		WriteTimeout:      90 * time.Second,
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    64 << 10,
-		TLSConfig: &tls.Config{
-			MinVersion:   tls.VersionTLS12,
-			Certificates: []tls.Certificate{cert},
-		},
-		ErrorLog: log.New(tlsNoiseFilter{}, "", log.LstdFlags),
+		TLSConfig:         tlsConfig,
+		ErrorLog:          log.New(tlsNoiseFilter{}, "", log.LstdFlags),
 	}
 	return s.ListenAndServeTLS("", "")
 }

@@ -15,6 +15,10 @@ services:
       # leave it empty to turn password sign-in off.
       SP_ADMIN_USER: ${SP_ADMIN_USER:-admin}
       SP_ADMIN_PASSWORD: ${SP_ADMIN_PASSWORD:-}
+      # Public hostnames that get a Let's Encrypt certificate (TLS-ALPN-01 on
+      # the HTTPS port; port 443 must reach this container, e.g. via SNI).
+      SP_ACME_DOMAINS: ${SP_ACME_DOMAINS:-}
+      SP_ACME_EMAIL: ${SP_ACME_EMAIL:-}
     volumes:
       - data:/data
     read_only: true

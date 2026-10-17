@@ -29,7 +29,8 @@ const usage = `usage: scratchpads <command>
                             grant a user, user/slot or user/* access to a topic
 
 Environment: SP_ADDR (:8443), SP_DATA (./data), SP_HOSTNAMES, SP_TLS_CERT,
-SP_TLS_KEY, SP_TRUST_CLOUDFLARE=1
+SP_TLS_KEY, SP_TRUST_CLOUDFLARE=1, SP_ACME_DOMAINS, SP_ACME_EMAIL,
+SP_ADMIN_USER, SP_ADMIN_PASSWORD
 `
 
 func main() {
@@ -87,6 +88,10 @@ func serve(cfg app.Config) error {
 		return fmt.Errorf("tls: %w", err)
 	}
 	pin, _ := app.PublicKeyPin(cert)
+	tlsConfig, tlsInfo, err := app.TLSConfig(cfg, cert)
+	if err != nil {
+		return fmt.Errorf("tls: %w", err)
+	}
 	if n, err := store.CountUsers(); err == nil && n == 0 {
 		log.Printf("no users yet; create the first admin with: scratchpads user <name> --admin")
 	}
@@ -97,7 +102,10 @@ func serve(cfg app.Config) error {
 	log.Printf("ScratchPads listening on https://%s (hosts %v)", cfg.Addr, cfg.Hostnames)
 	log.Printf("certificate sha256 %s", app.CertFingerprint(cert))
 	log.Printf("curl pin: --pinnedpubkey sha256//%s", pin)
-	return app.NewServer(cfg, store, web, skillFile).ListenAndServe(cert)
+	if len(cfg.ACMEDomains) > 0 {
+		log.Printf("ACME (Let's Encrypt, TLS-ALPN-01) for %v", cfg.ACMEDomains)
+	}
+	return app.NewServer(cfg, store, web, skillFile).ListenAndServe(tlsConfig, tlsInfo)
 }
 
 func admin(store *app.Store, cmd string, args []string) error {

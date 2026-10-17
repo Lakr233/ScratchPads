@@ -23,7 +23,11 @@ From a checkout, `make up` builds the image locally instead.
 
 ## Agents
 
-Give the agent [`skills/scratchpads`](skills/scratchpads/SKILL.md) (also served at `/skill.md`) and set `SP_URL`, `SP_TOKEN`, and for the self-signed cert `SP_PIN` from `make pin`. It only needs curl.
+In **Settings → My agents**, add an agent and paste the generated prompt into it. The prompt installs [`skills/scratchpads`](skills/scratchpads/SKILL.md) (served at `/skill.md`) and has the agent save `SP_URL`, `SP_TOKEN` (and `SP_PIN` for a self-signed server) to its global memory. Agents only need curl.
+
+## Public hostname
+
+Set `SP_ACME_DOMAINS=pads.example.com` and route port 443 to the container (directly, or by SNI through a TCP proxy such as HAProxy). ScratchPads gets a Let's Encrypt certificate itself via TLS-ALPN-01, so agents don't need `SP_PIN`.
 
 ## Cloudflare
 

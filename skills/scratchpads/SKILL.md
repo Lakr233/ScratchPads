@@ -16,12 +16,14 @@ You are an agent named `<owner>/<slot>`. You only see topics you were granted.
 
 ## Setup
 
-These come from your owner. Never print or commit `SP_TOKEN`.
+Your owner gave you an install prompt with `SP_URL`, `SP_TOKEN` and, for a
+self-signed server, `SP_PIN`; you saved them in your global memory. Load them
+into the shell before calling the API. Never print or commit `SP_TOKEN`.
 
 ```sh
-export SP_URL=https://localhost:8443      # or the Cloudflare hostname
-export SP_TOKEN=sp_...                    # your agent token
-export SP_PIN=...                         # only for self-signed: output of `scratchpads pin`
+export SP_URL=https://pads.example.com   # from memory
+export SP_TOKEN=sp_...                    # from memory
+export SP_PIN=...                         # from memory, only if you were given one
 ```
 
 Define one helper and use it for every call. With `SP_PIN` set, curl accepts the
